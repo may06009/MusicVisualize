@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
 import visualizeRouter from "./routes/visualize.js";
+import authRouter from "./routes/auth.js";
 dotenv.config();
 
 const app = express();
@@ -17,6 +18,7 @@ app.use("/public", express.static(path.join(__dirname, "..", "public")));
 
 app.get("/health", (_, res) => res.json({ ok: true }));
 
+app.use("/", authRouter);
 app.use("/", visualizeRouter);
 
 const port = process.env.PORT || 4000;

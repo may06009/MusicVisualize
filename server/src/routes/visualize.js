@@ -4,6 +4,7 @@ import path from "path";
 import fs from "fs";
 import { v4 as uuidv4 } from "uuid";
 import dotenv from "dotenv";
+import { requireAuth } from "../auth.js";
 dotenv.config();
 
 const router = Router();
@@ -15,7 +16,7 @@ const jobs = new Map();
 /**
  * 업로드 → job 생성
  */
-router.post("/visualize", upload.single("audio_file"), async (req, res) => {
+router.post("/visualize", requireAuth, upload.single("audio_file"), async (req, res) => {
   const jobId = uuidv4();
   jobs.set(jobId, { status: "running", result: null, error: null });
 
@@ -56,7 +57,7 @@ router.post("/visualize", upload.single("audio_file"), async (req, res) => {
 /**
  * 상태/결과 조회
  */
-router.get("/jobs/:id", (req, res) => {
+router.get("/jobs/:id", requireAuth, (req, res) => {
   const job = jobs.get(req.params.id);
   if (!job) return res.status(404).json({ error: "not found" });
   return res.json({ job_id: req.params.id, ...job });
