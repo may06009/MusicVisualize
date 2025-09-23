@@ -1,4 +1,5 @@
 1. Server 폴더 아래 .env 파일 필요
+
 .env 파일 구성{
 
 PORT=4000
@@ -33,8 +34,12 @@ KEEP_UPLOADS=1
 
 
 2. 실행 방법
+
 *실행 전 반드시 모델 쪽 필요 패키지와 라이브러리를 담은 환경 활성화 필요!(Conda로 작업)*
 
 터미널 생성 → server로 이동(cd server) → 터미널에 npm run dev 입력
 
 터미널 생성 → web으로 이동(cd web) → 터미널에 npm run dev 입력 → 웹브라우저 주소로 이동
+
++ 바탕화면에 music-viz, model-ml 폴더 필요
++ MusicVisualize(Model) README.md 먼저 읽기
