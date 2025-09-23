@@ -39,6 +39,17 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 app.use("/public", express.static(path.join(__dirname, "..", "public")));
 
+// ✅ viz-data 폴더만 별도로 마운트 (캐시 헤더는 선택)
+const vizDir = path.join(__dirname, "..", "public", "viz-data");
+
+app.use(
+  "/viz-data",
+  express.static(vizDir, {
+    maxAge: "1h", // 선택: 브라우저 캐시
+    // setHeaders: (res) => { res.setHeader("Cache-Control", "public, max-age=3600"); },
+  })
+);
+
 /** 헬스체크 */
 app.get("/health", (_, res) => res.json({ ok: true }));
 

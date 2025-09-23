@@ -27,7 +27,7 @@ build/
 
 # 서버 업로드/결과 (런타임 생성)
 server/uploads/
-server/public/results/
+server/public/viz-data/
 
 # 캐시
 .cache/
