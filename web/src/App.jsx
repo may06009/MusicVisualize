@@ -35,19 +35,6 @@ export default function App() {
 
         {/* 비로그인 상태에서는 아무 버튼도 안 보임. 로그인 상태에서만 로그아웃 버튼 */}
         <nav style={{ display: "flex", gap: 8 }}>
-          {!onHome && (
-            <Link
-              to="/"
-              style={{
-                padding: "8px 12px",
-                border: "1px solid #ddd",
-                borderRadius: 8,
-                background: "white",
-              }}
-            >
-              메인
-            </Link>
-          )}
           {authed && (
             <button
               onClick={logout}

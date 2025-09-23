@@ -53,7 +53,7 @@ export default function Auth() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="이메일"
-          required
+            required
           style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #ddd" }}
         />
         <input
@@ -70,10 +70,20 @@ export default function Auth() {
         </button>
       </form>
 
-      <div style={{ marginTop: 16 }}>
-        <button onClick={() => navigate("/")} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #ddd", background: "white" }}>
-          메인으로
-        </button>
+      {/* 소셜 로그인 */}
+      <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+        <a
+          href={`${API}/oauth/google`}
+          style={{ padding: "10px 12px", border: "1px solid #ddd", borderRadius: 8, textDecoration: "none", background: "white" }}
+        >
+          Google로 계속하기
+        </a>
+        <a
+          href={`${API}/oauth/naver`}
+          style={{ padding: "10px 12px", border: "1px solid #ddd", borderRadius: 8, textDecoration: "none", background: "white" }}
+        >
+          네이버로 계속하기
+        </a>
       </div>
     </div>
   );
