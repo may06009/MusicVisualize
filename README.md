@@ -1,23 +1,34 @@
 1. Server 폴더 아래 .env 파일 필요
 .env 파일 구성{
+
 PORT=4000
+
 CLIENT_URL=http://localhost:5173
+
 STORAGE_DIR=public/viz-data
+
 JWT_SECRET=(임의의 값 입력)
+
 DB_PATH=./data.db
 
 GOOGLE_CLIENT_ID=(클라이언트 아이디)
+
 GOOGLE_CLIENT_SECRET=(클라이언트 비밀번호)
+
 GOOGLE_CALLBACK_URL=http://localhost:4000/oauth/google/callback
 
 NAVER_CLIENT_ID=(클라이언트 아이디)
+
 NAVER_CLIENT_SECRET=(클라이언트 비밀번호)
+
 NAVER_CALLBACK_URL=http://localhost:4000/oauth/naver/callback
 
 MODEL_SCRIPT=C:/Users/PC/Desktop/model-ml/make_viz.py
+
 MODEL_CWD=C:/Users/PC/Desktop/model-ml
 
 KEEP_UPLOADS=1
+
 }
 
 
