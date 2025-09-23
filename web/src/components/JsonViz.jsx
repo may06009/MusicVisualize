@@ -1,8 +1,10 @@
+// JsonViz.jsx — make_viz.py 스키마 100% 호환 + 오디오 동기 + 스파클 + 비트-링
 import { useEffect, useRef, useState, useMemo } from "react";
 
-// --- 유틸 ---
-function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
-function lerp(a, b, t) { return a + (b - a) * t; }
+/* ---------- utils ---------- */
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+
 function toPairs(arrOrPairs = []) {
   if (!arrOrPairs || !arrOrPairs.length) return [];
   if (typeof arrOrPairs[0] === "number") {
@@ -23,7 +25,8 @@ function samplePairs(pairs, t) {
 }
 function normalizeSections(sections = [], duration = 0) {
   if (!sections.length) return [];
-  if ("start" in sections[0]) return sections;
+  if ("start" in sections[0]) return sections; // {start,end,label}
+  // [{end}] → {start,end,label}
   const out = [];
   let prev = 0;
   for (let i = 0; i < sections.length; i++) {
@@ -47,12 +50,87 @@ function toPalette(pal, theme="pastel") {
   };
   return THEMES[theme] || THEMES.pastel;
 }
+function hexToRgb(hex) {
+  if (!hex) return "255,255,255";
+  const m = hex.replace("#","").match(/^([0-9a-f]{6})$/i);
+  if (!m) return "255,255,255";
+  const int = parseInt(m[1], 16);
+  const r = (int >> 16) & 255, g = (int >> 8) & 255, b = int & 255;
+  return `${r},${g},${b}`;
+}
+const rand = (min, max) => min + Math.random() * (max - min);
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)] || "#fff";
 
-export default function JsonViz({ url, apiBase = "http://localhost:4000", sensitivity = 1.0, speed = 1.0, theme = "pastel" }) {
+/* ---------- particle (sparkles) ---------- */
+class Particle {
+  constructor(x, y, color, size, vx, vy, life) {
+    this.x = x; this.y = y;
+    this.vx = vx; this.vy = vy;
+    this.life = life;
+    this.size = size;
+    this.color = color; // hex
+  }
+  step(dt) {
+    this.x += this.vx * dt * 60;
+    this.y += this.vy * dt * 60;
+    this.vy += 0.05 * dt * 60;     // gravity
+    this.vx *= 0.995; this.vy *= 0.995;
+    this.life -= 0.02 * dt * 60;   // fade
+    return this.life > 0;
+  }
+}
+
+/* ---------- beat rings ---------- */
+class Ring {
+  constructor(x, y, color, maxR, width, lifeScale) {
+    this.x = x; this.y = y;
+    this.r = 0;
+    this.maxR = maxR;
+    this.width = width;
+    this.life = 1.0;
+    this.color = color; // hex
+    this.lifeScale = lifeScale;
+  }
+  step(dt) {
+    this.r += (this.maxR * 0.9) * dt * 2.2;
+    this.life -= 0.015 * dt * 60 * this.lifeScale;
+    return this.life > 0 && this.r < this.maxR;
+  }
+}
+
+/* ---------- component ---------- */
+/**
+ * props:
+ *  - url: JSON 경로 (예: `${API}/viz-data/<uuid>.json`)
+ *  - apiBase: "/uploads" 상대경로 앞에 붙일 서버 주소 (예: "http://localhost:4000")
+ *  - sensitivity: RMS 반응(0.7~1.5)
+ *  - speed: 애니메이션 속도(0.8~1.3)
+ *  - theme: "pastel" | "neon" | "sunset" (palette 미존재시 fallback)
+ *  - sparkleGain: 스파클 양/세기(0.5~2.0)
+ *  - glow: 발광 강도(0~1.5)
+ *  - maxParticles: 파티클 상한(기본 800)
+ *  - ringGain: 비트-링 강도/개수(0.6~2.0)
+ *  - ringWidth: 링 선 굵기(px)
+ *  - ringLife: 링 수명 스케일(0.6~1.5)
+ */
+export default function JsonViz({
+  url,
+  apiBase = "http://localhost:4000",
+  sensitivity = 1.0,
+  speed = 1.0,
+  theme = "pastel",
+  sparkleGain = 1.2,
+  glow = 1.0,
+  maxParticles = 800,
+  ringGain = 1.0,
+  ringWidth = 3,
+  ringLife = 1.0
+}) {
   const [j, setJ] = useState(null);
   const canvasRef = useRef(null);
   const audioRef = useRef(null);
 
+  // JSON 로드
   useEffect(() => {
     let alive = true;
     setJ(null);
@@ -60,6 +138,7 @@ export default function JsonViz({ url, apiBase = "http://localhost:4000", sensit
     return () => { alive = false; };
   }, [url]);
 
+  // JSON → 메타 변환 (make_viz.py 스키마 호환)
   const meta = useMemo(() => {
     if (!j) return null;
     const duration = Number(j.duration || 0);
@@ -67,33 +146,33 @@ export default function JsonViz({ url, apiBase = "http://localhost:4000", sensit
     const sections = normalizeSections(j.sections || [], duration);
     const palette = toPalette(j.palette, theme);
     const pointColor = j.point_color || palette[0] || "#fff";
-    const rmsPairs = toPairs(j.rms || []);
+    const rmsPairs = toPairs(j.rms || []); // make_viz.py가 {t,v} 쌍으로 저장함
     const pitchPairs = Array.isArray(j.pitch) && j.pitch.length
       ? j.pitch.map(p => ({ t: Number(p.t), v: Number(p.hz || 0) })).sort((a,b)=>a.t-b.t)
       : [];
-    // 오디오 URL (JSON에 상대경로가 오면 apiBase 붙임)
+    // 업로드 오디오(상대경로면 apiBase 붙임)
     const audioUrl = j.audio_url ? (j.audio_url.startsWith("http") ? j.audio_url : `${apiBase}${j.audio_url}`) : null;
     return { duration, beats, sections, palette, pointColor, rmsPairs, pitchPairs, audioUrl };
   }, [j, theme, apiBase]);
 
-  // 오디오 엘리먼트 준비
+  // 오디오 세팅
   useEffect(() => {
-    if (!meta) return;
-    if (!meta.audioUrl) return;
+    if (!meta?.audioUrl) return;
     const el = audioRef.current;
     if (!el) return;
     el.src = meta.audioUrl;
     el.load();
   }, [meta]);
 
+  // 렌더 루프
   useEffect(() => {
     if (!meta) return;
     const cvs = canvasRef.current;
     const ctx = cvs.getContext("2d");
     let raf = 0;
+    let prevTs = 0;
     const DPR = devicePixelRatio || 1;
 
-    // 크기
     function resize() {
       const w = cvs.clientWidth || 800;
       const hCSS = 420;
@@ -105,8 +184,7 @@ export default function JsonViz({ url, apiBase = "http://localhost:4000", sensit
     const onResize = () => resize();
     window.addEventListener("resize", onResize);
 
-    const { duration, beats, sections, palette, pointColor, rmsPairs, pitchPairs, audioUrl } = meta;
-    const bars = 28;
+    const { duration, beats, sections, palette, pointColor, rmsPairs, pitchPairs } = meta;
 
     const sectionColor = (t) => {
       if (!sections.length) return palette[0] || "#111";
@@ -115,18 +193,60 @@ export default function JsonViz({ url, apiBase = "http://localhost:4000", sensit
       return palette[idx] || "#111";
     };
 
-    function draw() {
-      // ⛳️ 오디오와 동기화: 재생 중이면 currentTime, 아니면 시간 진행
+    const particles = [];
+    const rings = [];
+    let beatIdx = 0;
+
+    const spawnBurst = (tSec) => {
+      const W = cvs.width, H = cvs.height;
+      const baseX = (tSec / Math.max(1, duration)) * W;
+      const baseY = H * 0.62;
+      const count = Math.round(20 * sparkleGain);
+      for (let i = 0; i < count; i++) {
+        const col = pick(palette);
+        const size = rand(2.2, 4.6) * DPR;
+        const vx = rand(-2.8, 2.8);
+        const vy = rand(-4.0, -1.2);
+        const life = rand(0.9, 1.3);
+        particles.push(new Particle(baseX, baseY, col, size, vx, vy, life));
+      }
+      // 박자-링
+      const maxR = Math.min(W, H) * (0.45 + 0.25 * Math.random()) * (0.9 + 0.2 * ringGain);
+      const ringCount = Math.max(1, Math.round(1 * ringGain));
+      for (let i = 0; i < ringCount; i++) {
+        const col = pick(palette);
+        rings.push(new Ring(baseX, baseY, col, maxR, ringWidth * DPR, ringLife));
+      }
+    };
+
+    const spawnAmbient = (tSec, rmsVal) => {
+      const W = cvs.width, H = cvs.height;
+      const amount = Math.min(6, Math.floor(rmsVal * 10 * sparkleGain));
+      for (let i = 0; i < amount; i++) {
+        const col = pick(palette);
+        const x = rand(0, W);
+        const y = rand(H*0.45, H*0.85);
+        const size = rand(1.6, 3.2) * DPR;
+        const vx = rand(-1.2, 1.2);
+        const vy = rand(-2.0, -0.4);
+        const life = rand(0.6, 1.0);
+        particles.push(new Particle(x, y, col, size, vx, vy, life));
+      }
+    };
+
+    function draw(ts) {
       const el = audioRef.current;
       const tSec = el && !isNaN(el.currentTime) ? el.currentTime : 0;
-
       const W = cvs.width, H = cvs.height;
+
       // 배경
-      ctx.fillStyle = sectionColor(tSec);
+      ctx.globalCompositeOperation = "source-over";
+      const bg = sectionColor(tSec);
+      ctx.fillStyle = bg;
       ctx.fillRect(0, 0, W, H);
 
-      // 라디얼 + 막대 (간략화)
-      const rmsVal = clamp(samplePairs(rmsPairs, tSec), 0, 1) * sensitivity;
+      // 라디얼 + 막대
+      const rmsVal = clamp(samplePairs(rmsPairs, tSec) * sensitivity, 0, 1);
       const centerX = W * 0.5, centerY = H * 0.52;
       const ringR = Math.min(W, H) * 0.22;
       const spokes = 42;
@@ -166,15 +286,60 @@ export default function JsonViz({ url, apiBase = "http://localhost:4000", sensit
       }
 
       // 수평 막대
-      const w = W / bars;
+      const bars = 28;
+      const bw = W / bars;
       for (let i = 0; i < bars; i++) {
         const n = Math.sin((tSec * 2.0 + i) * 0.7 * speed) * 0.5 + 0.5;
         const h = Math.min(H * 0.6, 10 + (H * 0.6 - 10) * clamp(rmsVal * (0.6 + 0.7 * n), 0, 1));
-        const x = i * w + w * 0.15;
+        const x = i * bw + bw * 0.15;
         const y = H - h - 18 * DPR;
         ctx.fillStyle = "rgba(255,255,255,0.85)";
-        ctx.fillRect(x, y, w * 0.7, h);
+        ctx.fillRect(x, y, bw * 0.7, h);
       }
+
+      // 비트 이벤트 처리
+      while (beatIdx < beats.length && beats[beatIdx] <= tSec) {
+        spawnBurst(beats[beatIdx]);
+        beatIdx++;
+      }
+      spawnAmbient(tSec, rmsVal);
+
+      // 스파클 & 링 그리기
+      ctx.globalCompositeOperation = "lighter";
+      ctx.shadowBlur = 24 * glow * DPR;
+      ctx.shadowColor = "rgba(255,255,255,0.85)";
+
+      const dt = prevTs ? Math.min(0.06, (ts - prevTs)/1000) : 0.016;
+      prevTs = ts;
+
+      // particles
+      if (particles.length > maxParticles) particles.splice(0, particles.length - maxParticles);
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        if (!p.step(dt)) { particles.splice(i, 1); continue; }
+        const a = clamp(p.life, 0, 1);
+        const fill = `rgba(${hexToRgb(p.color)},${0.35 + 0.65*a})`;
+        ctx.beginPath();
+        ctx.fillStyle = fill;
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // rings
+      for (let i = rings.length - 1; i >= 0; i--) {
+        const r = rings[i];
+        if (!r.step(dt)) { rings.splice(i, 1); continue; }
+        const alpha = clamp(r.life, 0, 1) * (0.55 + 0.35 * glow);
+        ctx.beginPath();
+        ctx.strokeStyle = `rgba(${hexToRgb(r.color)},${alpha})`;
+        ctx.lineWidth = r.width;
+        ctx.arc(r.x, r.y, r.r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // 복원
+      ctx.shadowBlur = 0;
+      ctx.globalCompositeOperation = "source-over";
 
       raf = requestAnimationFrame(draw);
     }
@@ -184,22 +349,16 @@ export default function JsonViz({ url, apiBase = "http://localhost:4000", sensit
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", onResize);
     };
-  }, [meta, sensitivity, speed]);
+  }, [meta, sensitivity, speed, theme, sparkleGain, glow, maxParticles, ringGain, ringWidth, ringLife]);
 
   return (
     <div style={{ marginTop: 12 }}>
-      <div style={{ marginBottom: 8, color: "#666" }}>애니메이션 + 오디오 동기 재생</div>
-
-      {/* ✅ 오디오 컨트롤 (JSON에 audio_url 있을 때만 표시) */}
+      <div style={{ marginBottom: 8, color: "#666" }}>
+        애니메이션 + 오디오 동기 재생 (스파클 & 빛 고리)
+      </div>
       {meta?.audioUrl && (
-        <audio
-          ref={audioRef}
-          src={meta.audioUrl}
-          controls
-          style={{ width: "100%", marginBottom: 8 }}
-        />
+        <audio ref={audioRef} src={meta.audioUrl} controls style={{ width: "100%", marginBottom: 8 }} />
       )}
-
       <canvas
         ref={canvasRef}
         style={{ width: "100%", height: 420, borderRadius: 12, background: "#111" }}
