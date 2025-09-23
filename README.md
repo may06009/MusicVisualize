@@ -41,5 +41,6 @@ KEEP_UPLOADS=1
 
 터미널 생성 → web으로 이동(cd web) → 터미널에 npm run dev 입력 → 웹브라우저 주소로 이동
 
++ 다운받은 파일은 바탕화면/model-ml 폴더에 위치해야함
 + 바탕화면에 music-viz, model-ml 폴더 필요
 + MusicVisualize(Model) README.md 먼저 읽기
