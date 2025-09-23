@@ -45,7 +45,7 @@ export default function Home() {
   const Result = () => {
     if (!data || data.status !== "done") return null;
     if (data.result?.type === "json") {
-      return <JsonViz url={`${API}${data.result.url}`} />; // 👈 애니메이션
+      return <JsonViz url={`${API}${data.result.url}`} apiBase={API} />; // 👈 애니메이션
     }
     if (data.result?.type === "video") {
       return (

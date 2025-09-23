@@ -76,7 +76,10 @@ router.post("/visualize", requireAuth, upload.single("audio_file"), async (req, 
     } catch (e) {
       jobs.set(jobId, { status: "failed", result: null, error: { message: String(e) } });
     } finally {
-      try { fs.unlinkSync(localAudioPath); } catch {}
+      const keep = String(process.env.KEEP_UPLOADS || "0") === "1";
+      if (!keep){
+        try { fs.unlinkSync(localAudioPath); } catch {}
+      }
     }
   })();
 

@@ -50,6 +50,8 @@ app.use(
   })
 );
 
+app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+
 /** 헬스체크 */
 app.get("/health", (_, res) => res.json({ ok: true }));
 
